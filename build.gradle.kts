@@ -198,7 +198,7 @@ paper {
     main = "xyz.nifeather.morph.FeatherMorphMain"
     bootstrapper = "xyz.nifeather.morph.FeatherMorphBootstrap"
     apiVersion = mcTarget
-    authors = listOf("arekkuzzera")
+    authors = listOf("arekkuzzera","cgw2023")
 
     serverDependencies {
         register("packetevents") {
@@ -248,8 +248,16 @@ paper {
     val permissionRoot = "feathermorph."
 
     val defaultAvailablePermissions = listOf(
+            permissionRoot + "unmorph"
+    );
+
+    defaultAvailablePermissions.forEach {
+        perm -> permissions.register(perm).get().default = BukkitPluginDescription.Permission.Default.TRUE;
+    }
+
+    val defaultDenyPermissions = listOf(
             permissionRoot + "morph",
-            permissionRoot + "unmorph",
+
             permissionRoot + "headmorph",
 
             permissionRoot + "skill",
@@ -271,14 +279,8 @@ paper {
 
             permissionRoot + "custom_text",
 
-            permissionRoot + "disguise_properties" + ".use"
-    );
+            permissionRoot + "disguise_properties" + ".use",
 
-    defaultAvailablePermissions.forEach {
-        perm -> permissions.register(perm).get().default = BukkitPluginDescription.Permission.Default.TRUE;
-    }
-
-    val defaultDenyPermissions = listOf(
             permissionRoot + "magic_bottle.exclude",
 
             permissionRoot + "can_fly.always",
