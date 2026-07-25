@@ -1,12 +1,14 @@
 package xyz.nifeather.morph.abilities.impl;
 
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import org.bukkit.NamespacedKey;
 import org.bukkit.craftbukkit.entity.CraftEntity;
+import org.bukkit.craftbukkit.util.CraftNamespacedKey;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
@@ -57,13 +59,20 @@ public class HealsFromEntityAbility extends MorphAbility<HealsFromEntityOption>
 
     private final Map<String, EntityType<?>> stringEntityTypeMap = new Object2ObjectOpenHashMap<>();
 
+
+
     private EntityType<?> getEntityType(String identifier)
     {
         var cache = stringEntityTypeMap.getOrDefault(identifier, null);
 
         if (cache != null) return cache;
 
-        cache = EntityType.byString(identifier).orElse(null);
+        var namespacedKey = NamespacedKey.fromString(identifier);
+
+        cache = namespacedKey != null
+                ? BuiltInRegistries.ENTITY_TYPE.getOptional(CraftNamespacedKey.toMinecraft(namespacedKey)).orElse(null)
+                : null;
+
         stringEntityTypeMap.put(identifier, cache);
 
         return cache;
@@ -118,7 +127,7 @@ public class HealsFromEntityAbility extends MorphAbility<HealsFromEntityOption>
 
                     var sources = nmsRecord.nmsWorld().damageSources();
 
-                    var source = beamTarget.getType().equals(EntityType.END_CRYSTAL)
+                    var source = beamTarget.getBukkitEntity().getType() == org.bukkit.entity.EntityType.END_CRYSTAL
                             ? sources.explosion(beamTarget, damager)
                             : new DamageSource(sources.magic().typeHolder(), beamTarget, damager);
 

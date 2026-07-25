@@ -11,13 +11,15 @@ val supportedMinecraftTargets = listOf(
     "1.21.11",
     "26.1",
     "26.1.1",
-    "26.1.2"
+    "26.1.2",
+    "26.2"
 )
 
 val paperDevBundleVersions = mapOf(
     "26.1" to "26.1.1.build.29-alpha",
     "26.1.1" to "26.1.1.build.29-alpha",
-    "26.1.2" to "26.1.2.build.72-stable"
+    "26.1.2" to "26.1.2.build.72-stable",
+    "26.2" to "26.2.build.65-beta"
 )
 
 val mcTarget = providers.gradleProperty("mc_target")
@@ -147,11 +149,11 @@ dependencies {
     compileOnly(files("libs/CMILib1.4.3.5.jar"))
     compileOnly(files("libs/Residence5.1.4.0.jar"))
     compileOnly(files("libs/pingwheel-plugin-forked-1.0.0-all.jar"))
-
-    compileOnly("com.palmergames.bukkit.towny:towny:${project.property("towny_version")}")
-    {
-        isTransitive = false
-    }
+    compileOnly(files("libs/Towny-0.103.1.0.jar"))
+//    compileOnly("com.palmergames.bukkit.towny:towny:${project.property("towny_version")}")
+//    {
+//        isTransitive = false
+//    }
 
     compileOnly("me.clip:placeholderapi:${project.property("papi_version")}")
     {
