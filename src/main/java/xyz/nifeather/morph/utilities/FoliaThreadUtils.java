@@ -18,7 +18,20 @@ import java.util.function.Supplier;
 
 public class FoliaThreadUtils
 {
-    public static Duration DEFAULT_WAIT_TIMEOUT = Duration.ofMillis(150);
+    // NOTE: 150ms was found to be too tight for Geyser/Floodgate (Bedrock) players,
+    // whose region tick does extra protocol-translation work (skin/form/block-palette
+    // translation etc). This regularly caused BuildFailedException ("Waiting too long
+    // for server thread ... to respond!") for those players, which in turn left nearby
+    // players with desynced fake entities/tab entries (visible as protocol errors on
+    // the Bedrock/Geyser side). Bumped the default and added a retrying variant below.
+    public static Duration DEFAULT_WAIT_TIMEOUT = Duration.ofMillis(500);
+
+    // Default amount of retry attempts for runOnEntitySyncWithRetry(...)
+    public static int DEFAULT_MAX_RETRY_ATTEMPTS = 3;
+
+    // Delay (in millis) between retry attempts. Kept small since we're already
+    // inside a blocking wait context (e.g. netty thread) and shouldn't stall too long.
+    public static long DEFAULT_RETRY_BACKOFF_MILLIS = 25L;
 
     public static <X> X runOnRegionSync(Location location, Supplier<X> supplier, int timeout)
             throws CancellationException, ExecutionException, TimeoutException, InterruptedException
@@ -45,6 +58,55 @@ public class FoliaThreadUtils
             throws CancellationException, ExecutionException, TimeoutException, InterruptedException
     {
         return delegateEntity(bukkitEntity, func).get(timeout.getNano(), TimeUnit.NANOSECONDS);
+    }
+
+    /**
+     * Same as {@link #runOnEntitySync(Entity, Function, Duration)}, but retries a few times
+     * with a small backoff instead of failing immediately on a single timeout.
+     * <p>
+     * This smooths out transient lag spikes on the target entity's region thread, which are
+     * especially common for Geyser/Floodgate (Bedrock) players whose region tick does extra
+     * protocol-translation work on top of normal entity/player ticking.
+     *
+     * @param bukkitEntity The target entity
+     * @param func         The function to run on the entity's owning thread
+     * @param timeout      The timeout for EACH attempt
+     * @param maxAttempts  The maximum amount of attempts before giving up and throwing TimeoutException
+     */
+    public static <X, E extends Entity> X runOnEntitySyncWithRetry(E bukkitEntity, Function<E, X> func,
+                                                                   Duration timeout, int maxAttempts)
+            throws CancellationException, ExecutionException, TimeoutException, InterruptedException
+    {
+        TimeoutException lastTimeout = null;
+
+        for (int attempt = 0; attempt < Math.max(1, maxAttempts); attempt++)
+        {
+            try
+            {
+                return runOnEntitySync(bukkitEntity, func, timeout);
+            }
+            catch (TimeoutException e)
+            {
+                lastTimeout = e;
+
+                // Give the busy region thread (Geyser translation work, chunk gen, etc.)
+                // a short window to catch up before trying again.
+                if (attempt < maxAttempts - 1)
+                    Thread.sleep(DEFAULT_RETRY_BACKOFF_MILLIS);
+            }
+        }
+
+        throw lastTimeout;
+    }
+
+    /**
+     * Overload of {@link #runOnEntitySyncWithRetry(Entity, Function, Duration, int)} using
+     * {@link #DEFAULT_WAIT_TIMEOUT} and {@link #DEFAULT_MAX_RETRY_ATTEMPTS}.
+     */
+    public static <X, E extends Entity> X runOnEntitySyncWithRetry(E bukkitEntity, Function<E, X> func)
+            throws CancellationException, ExecutionException, TimeoutException, InterruptedException
+    {
+        return runOnEntitySyncWithRetry(bukkitEntity, func, DEFAULT_WAIT_TIMEOUT, DEFAULT_MAX_RETRY_ATTEMPTS);
     }
 
     /**
