@@ -181,18 +181,7 @@ public class EntityWatcher extends SingleWatcher
 
         try
         {
-            // Previously this used a single runOnEntitySync(...) call with a 150ms timeout.
-            // That was found to be too tight for Geyser/Floodgate (Bedrock) players, whose
-            // region tick does extra protocol-translation work on top of normal ticking,
-            // which regularly caused this to time out and throw BuildFailedException.
-            //
-            // We now use a retrying variant with a larger per-attempt timeout, which gives
-            // a momentarily busy region thread a few chances to catch up before we give up.
-            return FoliaThreadUtils.runOnEntitySyncWithRetry(
-                    getBindingPlayer(),
-                    this::buildSpawnPacketsFor,
-                    FoliaThreadUtils.DEFAULT_WAIT_TIMEOUT,
-                    FoliaThreadUtils.DEFAULT_MAX_RETRY_ATTEMPTS);
+            return FoliaThreadUtils.runOnEntitySync(getBindingPlayer(), this::buildSpawnPacketsFor, FoliaThreadUtils.DEFAULT_WAIT_TIMEOUT);
         }
         catch (TimeoutException e)
         {
