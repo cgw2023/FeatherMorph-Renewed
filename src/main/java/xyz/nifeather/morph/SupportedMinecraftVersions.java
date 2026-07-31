@@ -10,8 +10,7 @@ public final class SupportedMinecraftVersions
             PRIMARY,
             "1.21.11",
             "26.1",
-            "26.1.1",
-            "26.2"
+            "26.1.1"
     );
 
     private SupportedMinecraftVersions()
