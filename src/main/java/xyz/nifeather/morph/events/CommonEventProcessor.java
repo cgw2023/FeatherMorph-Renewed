@@ -79,6 +79,14 @@ public class CommonEventProcessor extends MorphPluginObject implements Listener
 
     private final Bindable<Boolean> unMorphOnDeath = new Bindable<>(true);
 
+    /**
+     * Whether to forcefully unmorph a player when they disconnect, instead of keeping
+     * their disguise state paused and resuming it on next join.
+     * <p>
+     * See {@link ConfigOptions#UNMORPH_ON_LOGOUT} for details on why this defaults to true.
+     */
+    private final Bindable<Boolean> unMorphOnLogout = new Bindable<>(true);
+
     private final Bindable<Boolean> doRevealing = new Bindable<>(true);
 
     private final Bindable<Boolean> allowAcquireMorphs = new Bindable<>(false);
@@ -91,6 +99,7 @@ public class CommonEventProcessor extends MorphPluginObject implements Listener
         config.bind(doRevealing, ConfigOptions.REVEALING);
         config.bind(allowAcquireMorphs, ConfigOptions.ALLOW_ACQUIRE_MORPHS);
         config.bind(unMorphOnDeath, ConfigOptions.UNMORPH_ON_DEATH);
+        config.bind(unMorphOnLogout, ConfigOptions.UNMORPH_ON_LOGOUT);
 
         this.addSchedule(this::update);
     }
@@ -388,7 +397,8 @@ public class CommonEventProcessor extends MorphPluginObject implements Listener
         clientHandler.disconnect(e.getPlayer(), new PlayerDisconnectedException("Player disconnected"));
         skillHandler.trim();
 
-        var state = morphs.getDisguiseStateFor(e.getPlayer());
+        var player = e.getPlayer();
+        var state = morphs.getDisguiseStateFor(player);
 
         List<Player> players;
         synchronized (this)
@@ -398,19 +408,43 @@ public class CommonEventProcessor extends MorphPluginObject implements Listener
 
         if (state != null)
         {
-            var bossbar = state.getBossbar();
+            if (unMorphOnLogout.get())
+            {
+                // IMPORTANT: Do this right here, synchronously, while PlayerQuitEvent is firing.
+                //
+                // On Folia this event runs on the region thread that still owns this player's
+                // entity, so DisguiseState#dispose() -> buildSpawnPackets() will resolve
+                // IMMEDIATELY instead of going through FoliaThreadUtils' cross-region
+                // CompletableFuture + DEFAULT_WAIT_TIMEOUT (150ms).
+                //
+                // Doing the unmorph LATER (e.g. relying on a manually-run /fm forceunmorph,
+                // or leaving the DisguiseState "paused" via onPlayerQuit() until next join)
+                // means the player entity may already be fully removed from any region by the
+                // time someone tries to unmorph them -> runOnEntitySync() hangs until timeout
+                // -> BuildFailedException -> leftover "ghost" disguise entity for bystanders.
+                //
+                // This is exactly what was happening with disconnecting Geyser/Bedrock players:
+                // they'd stay morphed across a relog, and any later forced unmorph attempt would
+                // throw "Waiting too long for server thread of player ... to respond!".
+                morphs.unMorph(MorphManager.nilCommandSource, player, true, true);
+            }
+            else
+            {
+                // Legacy behavior: keep the disguise across disconnect and resume it on rejoin.
+                var bossbar = state.getBossbar();
 
-            if (bossbar != null)
-                players.forEach(p -> p.hideBossBar(bossbar));
+                if (bossbar != null)
+                    players.forEach(p -> p.hideBossBar(bossbar));
 
-            state.onPlayerQuit();
+                state.onPlayerQuit();
+            }
         }
 
         var targets = players.stream()
                 .filter(p -> p.hasPermission(CommonPermissions.DISGUISE_REVEALING))
                 .toList();
 
-        var cmd = new S2CRemoveAdminRevealCommand(e.getPlayer().getEntityId());
+        var cmd = new S2CRemoveAdminRevealCommand(player.getEntityId());
         targets.forEach(p -> clientHandler.sendCommand(p, cmd));
     }
 
@@ -466,8 +500,8 @@ public class CommonEventProcessor extends MorphPluginObject implements Listener
         switch (e.getReason())
         {
             case TARGET_ATTACKED_ENTITY, TARGET_ATTACKED_NEARBY_ENTITY,
-                    REINFORCEMENT_TARGET, FOLLOW_LEADER, DEFEND_VILLAGE,
-                    TARGET_ATTACKED_OWNER, OWNER_ATTACKED_TARGET, CUSTOM, UNKNOWN ->
+                 REINFORCEMENT_TARGET, FOLLOW_LEADER, DEFEND_VILLAGE,
+                 TARGET_ATTACKED_OWNER, OWNER_ATTACKED_TARGET, CUSTOM, UNKNOWN ->
             {
                 return;
             }
@@ -484,19 +518,19 @@ public class CommonEventProcessor extends MorphPluginObject implements Listener
 
         //检查是否要取消Target
         boolean shouldTarget = switch (sourceEntityType)
-                {
-                    case ZOMBIE, ZOMBIE_VILLAGER, HUSK, DROWNED -> EntityTypeUtils.isZombiesHostile(disguiseEntityType);
-                    case SKELETON, STRAY -> EntityTypeUtils.isGolem(disguiseEntityType) || state.getEntityType() == EntityType.PLAYER;
-                    case PIGLIN -> EntityTypeUtils.isPiglinHostile(disguiseEntityType);
-                    case PIGLIN_BRUTE -> EntityTypeUtils.isBruteHostile(disguiseEntityType);
-                    case WITHER_SKELETON -> EntityTypeUtils.isWitherSkeletonHostile(disguiseEntityType);
-                    case GUARDIAN, ELDER_GUARDIAN -> EntityTypeUtils.isGuardianHostile(disguiseEntityType);
-                    case WITHER -> EntityTypeUtils.isWitherHostile(disguiseEntityType);
-                    case PILLAGER, VEX, ILLUSIONER, VINDICATOR, EVOKER, RAVAGER -> EntityTypeUtils.isRaiderHostile(disguiseEntityType);
-                    case ENDERMAN -> disguiseEntityType == EntityType.PLAYER || disguiseEntityType == EntityType.ENDERMITE;
-                    case ZOGLIN -> EntityTypeUtils.isZoglinHostile(disguiseEntityType);
-                    default -> state.getEntityType() == EntityType.PLAYER;
-                };
+        {
+            case ZOMBIE, ZOMBIE_VILLAGER, HUSK, DROWNED -> EntityTypeUtils.isZombiesHostile(disguiseEntityType);
+            case SKELETON, STRAY -> EntityTypeUtils.isGolem(disguiseEntityType) || state.getEntityType() == EntityType.PLAYER;
+            case PIGLIN -> EntityTypeUtils.isPiglinHostile(disguiseEntityType);
+            case PIGLIN_BRUTE -> EntityTypeUtils.isBruteHostile(disguiseEntityType);
+            case WITHER_SKELETON -> EntityTypeUtils.isWitherSkeletonHostile(disguiseEntityType);
+            case GUARDIAN, ELDER_GUARDIAN -> EntityTypeUtils.isGuardianHostile(disguiseEntityType);
+            case WITHER -> EntityTypeUtils.isWitherHostile(disguiseEntityType);
+            case PILLAGER, VEX, ILLUSIONER, VINDICATOR, EVOKER, RAVAGER -> EntityTypeUtils.isRaiderHostile(disguiseEntityType);
+            case ENDERMAN -> disguiseEntityType == EntityType.PLAYER || disguiseEntityType == EntityType.ENDERMITE;
+            case ZOGLIN -> EntityTypeUtils.isZoglinHostile(disguiseEntityType);
+            default -> state.getEntityType() == EntityType.PLAYER;
+        };
 
         // 根据揭示值判定要不要允许生物攻击玩家
         var revealingState = revealingHandler.getRevealingState(player);

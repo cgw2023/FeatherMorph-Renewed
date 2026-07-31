@@ -162,7 +162,12 @@ public class ServerRenderer extends MorphPluginObject implements Listener
         watcher.writeEntry(CustomEntries.PROFILE_LISTED, true);
         watcher.writeEntry(CustomEntries.DONT_INCLUDE_PACKET_IDENTIFIER, true);
 
-        List<PacketWrapper<?>> playerSpawnPackets;
+        // Default to an empty list: if we fail to rebuild the player's own spawn packets
+        // (e.g. BuildFailedException from a timed-out Folia region scheduler call), we still
+        // want to proceed and send the disposal packets below so bystanders don't end up with
+        // a stuck "ghost" disguise entity. We simply won't be able to re-show the real player
+        // model in that edge case, but that's strictly better than leaving the fake mob behind.
+        List<PacketWrapper<?>> playerSpawnPackets = Collections.emptyList();
 
         try
         {
@@ -171,7 +176,11 @@ public class ServerRenderer extends MorphPluginObject implements Listener
         catch (BuildFailedException e)
         {
             logger.error("Can't build recover packets for player, BuildFailedException has been thrown!", e);
-            return;
+            // NOTE: intentionally NOT returning here anymore - see comment above.
+        }
+        finally
+        {
+            watcher.dispose();
         }
 
         List<PacketWrapper<?>> disposalPackets = Collections.emptyList();
@@ -183,8 +192,6 @@ public class ServerRenderer extends MorphPluginObject implements Listener
         {
             logger.error("Can't dispose virtual entity gracefully, BuildFailedException has been thrown!", e);
         }
-
-        watcher.dispose();
 
         for (Player p : affectedPlayers)
         {

@@ -93,6 +93,21 @@ public class ConfigOptions
             .defaultValue(true)
             .build();
 
+    /**
+     * Whether to forcefully clear a player's disguise state when they disconnect (PlayerQuitEvent),
+     * instead of keeping it "paused" and resuming it silently on next join.
+     * <p>
+     * Keeping this enabled (default) avoids a class of bugs where a player (most commonly observed
+     * with Geyser/Bedrock clients) disconnects and reconnects while still morphed, and any later
+     * attempt to force-unmorph them (e.g. via admin command after they've fully gone offline)
+     * fails with a BuildFailedException / TimeoutException because the player's entity is no longer
+     * ticking on any region thread, leaving a "ghost" disguise entity visible to other players.
+     */
+    public static final ConfigOption<Boolean> UNMORPH_ON_LOGOUT = ConfigOption.builder(Boolean.class)
+            .node(ConfigNode.create().append("unmorph_on_logout"))
+            .defaultValue(true)
+            .build();
+
     public static final ConfigOption<Boolean> ALLOW_CLIENT = ConfigOption.builder(Boolean.class)
             .node(clientNode().append("allow_client_mod"))
             .defaultValue(true)
