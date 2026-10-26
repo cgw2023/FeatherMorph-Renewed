@@ -21,6 +21,21 @@ public abstract class AbstractValues
         return sv;
     }
 
+    /**
+     * Creates a value at an explicit index. The automatic index is moved past it so that
+     * values created afterwards do not collide.
+     */
+    protected <X> SingleValue<X> createSingleAt(String name, int index, X val, EntityDataType<X> dataType)
+    {
+        if (val == null)
+            throw new IllegalArgumentException("May not pass a null value to getIndex()");
+
+        var sv = SingleValue.of(name, index, val, dataType);
+
+        currentIndex = Math.max(currentIndex, index + 1);
+        return sv;
+    }
+
     protected final Logger logger = FeatherMorphMain.getInstance().getSLF4JLogger();
 
     protected final List<SingleValue<?>> values = new CopyOnWriteArrayList<>();
