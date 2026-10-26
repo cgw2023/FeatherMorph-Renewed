@@ -13,14 +13,14 @@ val supportedMinecraftTargets = listOf(
     "26.1.1",
     "26.1.2",
     "26.2",
-        "26.3"
+    "26.3"
 )
 
 val paperDevBundleVersions = mapOf(
     "26.1" to "26.1.1.build.29-alpha",
     "26.1.1" to "26.1.1.build.29-alpha",
     "26.1.2" to "26.1.2.build.72-stable",
-    "26.2" to "26.2.build.65-beta",
+    "26.2" to "26.2.build.123-stable",
     "26.3" to "26.3.build.49-alpha"
 )
 

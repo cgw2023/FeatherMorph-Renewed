@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.9.3
+
+### Added
+- Added support for Minecraft 26.3 (`26.3.build.49-alpha`).
+
+### Fixed
+- Fixed the slime/magma cube size metadata index on 26.2+.
+- Fixed region/entity thread timeouts when unmorphing players during `/fm reload`; reload now intentionally leaves players unmorphed instead of restoring disguises.
+
+## 2.9.2
+
+### Added
+- Added a release jar targeting Minecraft 26.2.
+
+### Changed
+- Updated the default Minecraft target to 26.2.
+- Added Paper dev bundle `26.2.build.123-stable` for 26.2 builds.
+
 ## 2.9.1
 
 ### Fixed
