@@ -44,7 +44,7 @@ public class FoliaThreadUtils
     public static <X, E extends Entity> X runOnEntitySync(E bukkitEntity, Function<E, X> func, Duration timeout)
             throws CancellationException, ExecutionException, TimeoutException, InterruptedException
     {
-        return delegateEntity(bukkitEntity, func).get(timeout.getNano(), TimeUnit.NANOSECONDS);
+        return delegateEntity(bukkitEntity, func).get(timeout.toNanos(), TimeUnit.NANOSECONDS);
     }
 
     /**
@@ -72,7 +72,7 @@ public class FoliaThreadUtils
     public static void runAtLocationSync(Location location, Consumer<World> worldConsumer, Duration timeout)
             throws ExecutionException, InterruptedException, TimeoutException
     {
-        delegateLocation(location).thenAccept(worldConsumer).get(timeout.getNano(), TimeUnit.NANOSECONDS);
+        delegateLocation(location).thenAccept(worldConsumer).get(timeout.toNanos(), TimeUnit.NANOSECONDS);
     }
 
     public static CompletableFuture<World> delegateLocation(Location location)

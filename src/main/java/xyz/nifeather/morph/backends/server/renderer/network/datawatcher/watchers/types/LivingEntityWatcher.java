@@ -186,6 +186,18 @@ public class LivingEntityWatcher extends EntityWatcher
     }
 
     @Override
+    public List<PacketWrapper<?>> buildSpawnPacketsDirect()
+    {
+        var packets = new ObjectArrayList<PacketWrapper<?>>();
+        var entityPackets = super.buildSpawnPacketsDirect();
+
+        packets.addAll(entityPackets);
+        packets.add(buildAttributePacket());
+
+        return packets;
+    }
+
+    @Override
     protected void doSync()
     {
         super.doSync();

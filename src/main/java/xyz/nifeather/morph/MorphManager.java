@@ -1622,39 +1622,19 @@ public class MorphManager extends MorphPluginObject implements IManagePlayerData
             }
         });
 
-        var stateToRecover = getActiveDisguises();
-        stateToRecover = stateToRecover.stream()
-                .map(oldState -> oldState.createCopy(oldState.getPlayer(), allowDisguiseWaypoint.get()))
-                .toList();
-
+        // Unmorph everyone. The renderer now defers the actual packet work to each player's
+        // region thread (see ServerRenderer#unDisguiseForPlayer), so this must not be followed
+        // by an immediate remorph: on regionised servers the remorph could be scheduled before
+        // the unmorph task has run, leaving the client with a stale/duplicated disguise.
+        //
+        // Restoring the disguises from here is intentionally not done anymore. It used to
+        // require building recovery packets from the command thread, which waited for every
+        // player's region and timed out ("Waiting too long for server thread of player ...").
         unMorphAll(false);
 
         var success = playerdata.reload();
 
         stateToOfflineStore.forEach(savedDisguises::save);
-
-        //重载完成后恢复玩家伪装
-        stateToRecover.forEach(s ->
-        {
-            var player = s.getPlayer();
-
-            this.scheduleOn(player, () ->
-            {
-                var parameter = MorphParameters.create(player, s.getDisguiseIdentifier());
-                if (this.prepareDisguiseMeta(parameter) == null)
-                    return;
-
-                if (disguiseFromState(s))
-                {
-                    refreshClientState(s);
-                    MessageUtils.send(player, MorphStrings.recoverString());
-                }
-                else
-                {
-                    unMorph(nilCommandSource, player, true, true);
-                }
-            });
-        });
 
         var currentToken = ThreadLocalRandom.current().nextInt();
         this.reloadToken = currentToken;

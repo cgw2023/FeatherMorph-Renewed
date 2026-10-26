@@ -163,6 +163,43 @@ public class EntityWatcher extends SingleWatcher
     @Override
     public List<PacketWrapper<?>> buildSpawnPackets() throws BuildFailedException
     {
+        var player = getBindingPlayer();
+
+        // Don't go through the scheduler if we are already on the player's region thread.
+        if (FoliaThreadUtils.isTickThreadFor(player))
+            return this.buildSpawnPacketsDirect();
+
+        try
+        {
+            return FoliaThreadUtils.runOnEntitySync(player, ignored -> this.buildSpawnPacketsDirect(), FoliaThreadUtils.DEFAULT_WAIT_TIMEOUT);
+        }
+        catch (TimeoutException e)
+        {
+            //仅仅是服务器太慢导致的等待超时，不要立马取消玩家的变形会话
+            throw new BuildFailedException("Waiting too long for server thread of player %s to respond!".formatted(player.getName()), e)
+                    .critical(false);
+        }
+        catch (InterruptedException e)
+        {
+            throw new BuildFailedException("Task has been interrupted, why?", e);
+        }
+        catch (CancellationException e)
+        {
+            throw new BuildFailedException("Task cancelled, why?", e);
+        }
+        catch (Throwable t)
+        {
+            throw new BuildFailedException("Unhandled exception while building packet for '%s'!", t);
+        }
+    }
+
+    /**
+     * Builds the spawn packets without scheduling anything.
+     * <p>
+     * The caller must make sure this method runs on the binding player's region thread.
+     */
+    public List<PacketWrapper<?>> buildSpawnPacketsDirect()
+    {
         List<PacketWrapper<?>> result = new ObjectArrayList<>();
 
         if (this.readEntryOrDefault(CustomEntries.VANISHED, false))
@@ -179,28 +216,7 @@ public class EntityWatcher extends SingleWatcher
             return result;
         }
 
-        try
-        {
-            return FoliaThreadUtils.runOnEntitySync(getBindingPlayer(), this::buildSpawnPacketsFor, FoliaThreadUtils.DEFAULT_WAIT_TIMEOUT);
-        }
-        catch (TimeoutException e)
-        {
-            //仅仅是服务器太慢导致的等待超时，不要立马取消玩家的变形会话
-            throw new BuildFailedException("Waiting too long for server thread of player %s to respond!".formatted(getBindingPlayer().getName()), e)
-                    .critical(false);
-        }
-        catch (InterruptedException e)
-        {
-            throw new BuildFailedException("Task has been interrupted, why?", e);
-        }
-        catch (CancellationException e)
-        {
-            throw new BuildFailedException("Task cancelled, why?", e);
-        }
-        catch (Throwable t)
-        {
-            throw new BuildFailedException("Unhandled exception while building packet for '%s'!", t);
-        }
+        return this.buildSpawnPacketsFor(getBindingPlayer());
     }
 
     @Override

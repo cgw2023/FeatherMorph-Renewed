@@ -27,6 +27,7 @@ import xyz.nifeather.morph.backends.server.renderer.utilties.WatcherUtils;
 import xyz.nifeather.morph.config.MorphConfigManager;
 import xyz.nifeather.morph.misc.BuildFailedException;
 import xyz.nifeather.morph.misc.ExecutionErrorException;
+import xyz.nifeather.morph.utilities.FoliaThreadUtils;
 
 import java.util.Collections;
 import java.util.List;
@@ -153,36 +154,9 @@ public class ServerRenderer extends MorphPluginObject implements Listener
         if (player == null) return;
 
         var protocolManager = PacketEvents.getAPI().getPlayerManager();
-        PlayerWatcher watcher = new PlayerWatcher(player);
-        watcher.markSilent(this);
 
-        watcher.writeEntry(CustomEntries.PROFILE, ((CraftPlayer) player).getProfile());
-        watcher.writeEntry(CustomEntries.SPAWN_UUID, player.getUniqueId());
-        watcher.writeEntry(CustomEntries.SPAWN_ID, player.getEntityId());
-        watcher.writeEntry(CustomEntries.PROFILE_LISTED, true);
-        watcher.writeEntry(CustomEntries.DONT_INCLUDE_PACKET_IDENTIFIER, true);
-
-        // Default to an empty list: if we fail to rebuild the player's own spawn packets
-        // (e.g. BuildFailedException from a timed-out Folia region scheduler call), we still
-        // want to proceed and send the disposal packets below so bystanders don't end up with
-        // a stuck "ghost" disguise entity. We simply won't be able to re-show the real player
-        // model in that edge case, but that's strictly better than leaving the fake mob behind.
-        List<PacketWrapper<?>> playerSpawnPackets = Collections.emptyList();
-
-        try
-        {
-            playerSpawnPackets = watcher.buildSpawnPackets(false);
-        }
-        catch (BuildFailedException e)
-        {
-            logger.error("Can't build recover packets for player, BuildFailedException has been thrown!", e);
-            // NOTE: intentionally NOT returning here anymore - see comment above.
-        }
-        finally
-        {
-            watcher.dispose();
-        }
-
+        // Disposal packets only read data stored in the watcher, so they can be built on any thread.
+        // They have to be built now because the watcher gets disposed right after this method returns.
         List<PacketWrapper<?>> disposalPackets = Collections.emptyList();
         try
         {
@@ -193,13 +167,70 @@ public class ServerRenderer extends MorphPluginObject implements Listener
             logger.error("Can't dispose virtual entity gracefully, BuildFailedException has been thrown!", e);
         }
 
-        for (Player p : affectedPlayers)
-        {
-            for (PacketWrapper<?> removePacket : disposalPackets)
-                protocolManager.sendPacket(p, removePacket);
+        final List<PacketWrapper<?>> finalDisposalPackets = disposalPackets;
 
-            for (var packet : playerSpawnPackets)
-                protocolManager.sendPacket(p, packet);
+        // Building the recovery packets requires reading the player's NMS state, so this has to run
+        // on the player's region thread. Schedule it instead of blocking the calling thread: waiting
+        // for another region while running on a region/global tick thread (e.g. during /fm reload)
+        // can time out, leaving bystanders without the player's real entity (a "ghost" disguise).
+        Runnable sendTask = () ->
+        {
+            PlayerWatcher watcher = null;
+            List<PacketWrapper<?>> playerSpawnPackets = Collections.emptyList();
+
+            try
+            {
+                watcher = new PlayerWatcher(player);
+                watcher.markSilent(this);
+
+                watcher.writeEntry(CustomEntries.PROFILE, ((CraftPlayer) player).getProfile());
+                watcher.writeEntry(CustomEntries.SPAWN_UUID, player.getUniqueId());
+                watcher.writeEntry(CustomEntries.SPAWN_ID, player.getEntityId());
+                watcher.writeEntry(CustomEntries.PROFILE_LISTED, true);
+                watcher.writeEntry(CustomEntries.DONT_INCLUDE_PACKET_IDENTIFIER, true);
+
+                playerSpawnPackets = watcher.buildSpawnPacketsDirect(false);
+            }
+            catch (Throwable t)
+            {
+                logger.error("Can't build recover packets for player, unexpected error!", t);
+            }
+            finally
+            {
+                if (watcher != null)
+                    watcher.dispose();
+            }
+
+            for (Player p : affectedPlayers)
+            {
+                for (PacketWrapper<?> removePacket : finalDisposalPackets)
+                    protocolManager.sendPacket(p, removePacket);
+
+                for (var packet : playerSpawnPackets)
+                    protocolManager.sendPacket(p, packet);
+            }
+        };
+
+        // During shutdown running immediately is fine (and scheduling would fail if the plugin is
+        // already disabled). On the player's own thread we can simply run the task right away.
+        if (!plugin.isEnabled() || FoliaThreadUtils.isTickThreadFor(player))
+        {
+            sendTask.run();
+            return;
+        }
+
+        try
+        {
+            FoliaThreadUtils.delegateEntity(player, ignored ->
+            {
+                sendTask.run();
+                return null;
+            });
+        }
+        catch (Throwable t)
+        {
+            logger.warn("Can't schedule un-disguise task for player '%s', running immediately".formatted(player.getName()), t);
+            sendTask.run();
         }
     }
 

@@ -182,6 +182,28 @@ public class PlayerWatcher extends LivingEntityWatcher
         return list;
     }
 
+    /**
+     * Builds the spawn packets without scheduling anything.
+     * <p>
+     * The caller must make sure this method runs on the binding player's region thread.
+     */
+    public List<PacketWrapper<?>> buildSpawnPacketsDirect(boolean includePlayerInfo)
+    {
+        var list = new ObjectArrayList<PacketWrapper<?>>();
+
+        var gameProfile = this.readEntryOrThrow(CustomEntries.PROFILE);
+
+        if (gameProfile.name().isBlank())
+            throw new IllegalArgumentException("GameProfile name is empty!");
+
+        if (includePlayerInfo)
+            list.addAll(this.buildPlayerInfoPackets());
+
+        list.addAll(super.buildSpawnPacketsDirect());
+
+        return list;
+    }
+
     @Override
     public List<PacketWrapper<?>> buildVirtualEntityDisposalPackets() throws BuildFailedException
     {
