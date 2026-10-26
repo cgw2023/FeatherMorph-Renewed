@@ -140,7 +140,7 @@ public class MorphBukkitVexHolder
 
             thisEntity.getMoveControl().setWantedPosition(thisEntity.getX(), thisEntity.getY(), thisEntity.getZ(), 2);
 
-            ((org.bukkit.entity.Vex)thisEntity.getBukkitEntity()).setTarget(targetMob.getBukkitEntity());
+            ((org.bukkit.entity.Vex)thisEntity.getBukkitEntity()).setTarget((org.bukkit.entity.LivingEntity) targetMob.getBukkitEntity());
         }
     }
 
@@ -194,7 +194,7 @@ public class MorphBukkitVexHolder
             if (targetMob != null && targetMob.isRemoved())
                 this.targetMob = null;
 
-            ((org.bukkit.entity.Vex)thisEntity.getBukkitEntity()).setTarget(targetMob.getBukkitEntity());
+            ((org.bukkit.entity.Vex)thisEntity.getBukkitEntity()).setTarget((org.bukkit.entity.LivingEntity) targetMob.getBukkitEntity());
         }
     }
 }

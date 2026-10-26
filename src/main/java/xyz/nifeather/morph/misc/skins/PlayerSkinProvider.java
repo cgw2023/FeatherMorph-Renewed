@@ -5,7 +5,6 @@ import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.GameProfileRepository;
 import com.mojang.authlib.ProfileLookupCallback;
 import com.mojang.authlib.exceptions.AuthenticationUnavailableException;
-import com.mojang.authlib.services.ProfileNotFoundException;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.server.MinecraftServer;
@@ -51,6 +50,21 @@ public class PlayerSkinProvider extends MorphPluginObject
                 task -> this.batchPlayerInfo(),
                 1500, 1500,
                 TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * {@code ProfileNotFoundException} lives in different packages depending on the Minecraft
+     * version ({@code com.mojang.authlib.yggdrasil} before 26.3, {@code com.mojang.authlib.services}
+     * on 26.3+). Checking the class name keeps every supported build target compilable.
+     */
+    private static boolean isProfileNotFound(@Nullable Throwable throwable)
+    {
+        if (throwable == null) return false;
+
+        var className = throwable.getClass().getName();
+
+        return className.equals("com.mojang.authlib.yggdrasil.ProfileNotFoundException")
+                || className.equals("com.mojang.authlib.services.ProfileNotFoundException");
     }
 
     private final SkinStorage skinStorage = new SkinStorage();
@@ -131,7 +145,7 @@ public class PlayerSkinProvider extends MorphPluginObject
 
             public void onProfileLookupFailed(String profileName, Exception exception)
             {
-                if (exception instanceof ProfileNotFoundException)
+                if (isProfileNotFound(exception))
                 {
                     //do nothing
                 }
